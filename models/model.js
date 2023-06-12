@@ -18,10 +18,12 @@ const getJewels = async ({ limits, order_by, page }) => {
     query += " LIMIT %s";
   }
 
-  if (page && limits) {
+  if (page > 0 && limits) {
     const offset = (page - 1) * limits;
     values.push(offset);
     query += " OFFSET %s";
+  } else {
+    throw { code: "400" }
   }
 
   try {

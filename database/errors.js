@@ -9,7 +9,7 @@ export const handleErrors = (code) => {
     case "400":
       return {
         status: 400,
-        message: "Faltan datos en la petición",
+        message: "El servidor no puede procesar la petición. Faltan datos en la petición o están erróneos",
       };
     case "404":
       return {
@@ -19,7 +19,7 @@ export const handleErrors = (code) => {
     case "28P01":
       return {
         status: 400,
-        message: "Falló en la atutenticación de la contraseña para el usuario."
+        message: "Falló en la autenticación de la contraseña para el usuario."
       }
     default:
       return {
