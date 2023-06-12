@@ -4,21 +4,35 @@ import { pool } from "../database/connection.js"
 
 // Return all jewels following HATEOAS and can receive query params.
 const getJewels = async ({ limits, order_by, page }) => {
-  const [order_field, direction] = order_by.split("_");
+  let query = "SELECT * FROM inventario";
+  const values = [];
 
-  const offset = (page - 1) * limits;
+  if (order_by) {
+    const [order_field, direction] = order_by.split("_");
+    values.push(order_field, direction);
+    query += " ORDER BY %s %s";
+  }
 
-  const formattedQuery = format(
-    'SELECT * FROM inventario order by %s %s LIMIT %s OFFSET %s',
-    order_field,
-    direction,
-    limits,
-    offset
-  );
+  if (limits) {
+    values.push(limits);
+    query += " LIMIT %s";
+  }
 
-  const { rows: inventario } = await pool.query(formattedQuery);
-  console.log(inventario)
-  return inventario;
+  if (page && limits) {
+    const offset = (page - 1) * limits;
+    values.push(offset);
+    query += " OFFSET %s";
+  }
+
+  try {
+    const formattedQuery = format(query, ...values);
+    const { rows: inventario } = await pool.query(formattedQuery);
+    return inventario;
+  } catch (error) {
+    console.log(error);
+    throw { code: error.code }
+  }
+
 }
 
 const getJewelsWithFilters = async ({ precio_min, precio_max, categoria, metal }) => {
@@ -27,49 +41,58 @@ const getJewelsWithFilters = async ({ precio_min, precio_max, categoria, metal }
 
   const addFilter = (field, comparatorOperator, value) => {
     values.push(value);
-    filters.push(`${field} ${comparatorOperator} ${value}`)
-  }
-  //llamando a funcion interna con argumentos definidos
-  if (precio_max) addFilter('precio', '<=', precio_max)
+    // to prevent SQL Injection de values for the filter will come from values array
+    filters.push(`${field} ${comparatorOperator} $${values.length}`);
+  };
 
-  if (precio_min) addFilter('precio', '>=', precio_min)
+  if (precio_max) addFilter('precio', '<=', precio_max);
 
-  if (categoria) addFilter('categoria', '=', `'${categoria}'`)
+  if (precio_min) addFilter('precio', '>=', precio_min);
 
-  if (metal) addFilter('metal', '=', `'${metal}'`)
+  if (categoria) addFilter('categoria', '=', categoria);
+
+  if (metal) addFilter('metal', '=', metal);
 
   let query = "SELECT * FROM inventario";
 
   if (filters.length > 0) {
-    filters = filters.join(" AND ");
-    query += ` WHERE ${filters}`;
+    query += ` WHERE ${filters.join(" AND ")}`;
   }
 
-  const { rows: jewels } = await pool.query(query)
-  return jewels
-}
+  try {
+    const { rows: jewels } = await pool.query(query, values);
+    return jewels;
+  } catch (error) {
+    console.log(error);
+    throw { code: error.code };
+  }
+};
 
 
 
 const prepareHATEOAS = (jewels) => {
-  const results = jewels.map((e) => {
-    return {
-      name: e.nombre,
-      "href": `/joyas/joya/${e.id}`
+  try {
+    const results = jewels.map((e) => {
+      return {
+        name: e.nombre,
+        "href": `/joyas/joya/${e.id}`
+      }
+    })
+
+    const totalJewels = jewels.length;
+    const totalStock = jewels.reduce((sum, e) => sum + e.stock, 0)
+    const HATEOAS = {
+      "totalJoyas": totalJewels,
+      "stockTotal": totalStock,
+      results
     }
-  })
 
-  console.log("Valor de Results: ", results)
+    return HATEOAS
 
-  const totalJewels = jewels.length;
-  const totalStock = jewels.reduce((sum, e) => sum + e.stock, 0)
-  const HATEOAS = {
-    "totalJoyas": totalJewels,
-    "stockTotal": totalStock,
-    results
-
+  } catch (error) {
+    console.log(error)
+    throw { code: error.code }
   }
-  return HATEOAS
 };
 
 
